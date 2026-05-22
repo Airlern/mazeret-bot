@@ -25,10 +25,30 @@ aktif = []
 # =========================
 class MazaretModal(Modal, title="Mazaret"):
 
-    tur = TextInput(label="Tür")
-    bas = TextInput(label="Başlangıç (gün.ay.yıl saat)")
-    bit = TextInput(label="Bitiş (gün.ay.yıl saat)")
-    aciklama = TextInput(label="Açıklama", style=discord.TextStyle.paragraph)
+    tur = TextInput(
+        label="Mazeret Türü",
+        placeholder="Sağlık / Aile / Şehir Dışı",
+        required=True
+    )
+
+    bas = TextInput(
+        label="Başlangıç Tarih & Saat",
+        placeholder="22.05.2026 15:00",
+        required=True
+    )
+
+    bit = TextInput(
+        label="Bitiş Tarih & Saat",
+        placeholder="23.05.2026 15:00",
+        required=True
+    )
+
+    aciklama = TextInput(
+        label="Açıklama",
+        placeholder="Örn: Hastaneye gitmem gerekiyor",
+        style=discord.TextStyle.paragraph,
+        required=True
+    )
 
     async def on_submit(self, interaction):
 
@@ -41,7 +61,11 @@ class MazaretModal(Modal, title="Mazaret"):
         embed.add_field(name="Bitiş", value=self.bit.value)
         embed.add_field(name="Açıklama", value=self.aciklama.value, inline=False)
 
-        await kanal.send(embed=embed, view=OnayView(interaction.user, self.tur.value, self.bit.value))
+        view = OnayView(interaction.user, self.tur.value, self.bit.value)
+
+        msg = await kanal.send(embed=embed, view=view)
+
+        view.message = msg
 
         await interaction.response.send_message("Gönderildi", ephemeral=True)
 
@@ -63,7 +87,7 @@ class ButtonOnlyView(View):
             color=discord.Color.green()
         )
 
-        embed.set_image(url="https://media.discordapp.net/attachments/1023953372467966023/1507325447183274154/ChatGPT_Image_22_May_2026_13_12_39.png?ex=6a117db7&is=6a102c37&hm=609b7c3d8ae933f003298d4a8894e9dc0db77fe54602b41d0f0043e6dfa6cfd0&=&format=webp&quality=lossless&width=1163&height=930")
+        embed.set_image(url="https://cdn.discordapp.com/attachments/1023953372467966023/1507325447183274154/ChatGPT_Image_22_May_2026_13_12_39.png?ex=6a117db7&is=6a102c37&hm=609b7c3d8ae933f003298d4a8894e9dc0db77fe54602b41d0f0043e6dfa6cfd0&")
 
         await interaction.response.send_modal(MazaretModal())
 
@@ -78,6 +102,8 @@ class OnayView(View):
         self.user = user
         self.tur = tur
         self.bitis = bitis
+        self.locked = False
+        self.message = None
 
     def yetkili(self, interaction):
         return discord.utils.get(interaction.user.roles, id=YETKILI_ROL)
@@ -85,8 +111,16 @@ class OnayView(View):
     @discord.ui.button(label="Onayla", style=discord.ButtonStyle.success)
     async def onay(self, interaction, button):
 
+        if self.locked:
+            return await interaction.response.send_message(
+                "Bu başvuru zaten sonuçlandı.",
+                ephemeral=True
+            )
+
         if not self.yetkili(interaction):
             return await interaction.response.send_message("Yetki yok", ephemeral=True)
+
+        self.locked = True
 
         role = interaction.guild.get_role(MAZERET_ROL)
         await self.user.add_roles(role)
@@ -112,13 +146,28 @@ class OnayView(View):
         except:
             pass
 
+        # 🔒 BUTONLARI KİLİTLE
+        for item in self.children:
+            item.disabled = True
+
+        if self.message:
+            await self.message.edit(view=self)
+
         await interaction.response.send_message("Onaylandı", ephemeral=True)
 
     @discord.ui.button(label="Reddet", style=discord.ButtonStyle.danger)
     async def red(self, interaction, button):
 
+        if self.locked:
+            return await interaction.response.send_message(
+                "Bu başvuru zaten sonuçlandı.",
+                ephemeral=True
+            )
+
         if not self.yetkili(interaction):
             return await interaction.response.send_message("Yetki yok", ephemeral=True)
+
+        self.locked = True
 
         log = bot.get_channel(LOG_KANAL)
 
@@ -133,6 +182,13 @@ class OnayView(View):
             await self.user.send("❌ Mazaretin REDDEDİLDİ.")
         except:
             pass
+
+        # 🔒 BUTONLARI KİLİTLE
+        for item in self.children:
+            item.disabled = True
+
+        if self.message:
+            await self.message.edit(view=self)
 
         await interaction.response.send_message("Reddedildi", ephemeral=True)
 
