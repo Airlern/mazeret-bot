@@ -44,7 +44,7 @@ class MazaretModal(Modal, title="Mazaret"):
 
 class BasvuruView(View):
 
-       @discord.ui.button(
+    @discord.ui.button(
         label="📝 Mazaret Oluştur",
         style=discord.ButtonStyle.green
     )
@@ -52,14 +52,17 @@ class BasvuruView(View):
 
         embed = discord.Embed(
             title="📋 Mazaret Başvurusu",
-            description="Başvuru yapmak için butona tıkla",
+            description="Başvuru yapmak için aşağıdaki butona tıkla",
             color=discord.Color.green()
         )
 
         embed.set_image(url="https://media.discordapp.net/attachments/1023953372467966023/1507325447183274154/ChatGPT_Image_22_May_2026_13_12_39.png?ex=6a117db7&is=6a102c37&hm=609b7c3d8ae933f003298d4a8894e9dc0db77fe54602b41d0f0043e6dfa6cfd0&=&format=webp&quality=lossless&width=1163&height=930")
 
-        await interaction.response.send_modal(MazaretModal())
-
+        await interaction.response.send_message(
+            embed=embed,
+            view=ButtonOnlyView(),
+            ephemeral=True
+        )
 
 class OnayView(View):
 
