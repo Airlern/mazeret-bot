@@ -9,6 +9,7 @@ MAZERET_KANAL = 1505330270398578857
 ONAY_KANAL = 1505330270696505465
 LOG_KANAL = 1505330270696505467
 YETKILI_ROL = 1505330268204961816
+MAZERET_ROL = 1505330268129722506
 
 intents = discord.Intents.default()
 intents.members = True
@@ -43,8 +44,20 @@ class MazaretModal(Modal, title="Mazaret"):
 
 class BasvuruView(View):
 
-    @discord.ui.button(label="Mazaret Oluştur", style=discord.ButtonStyle.green)
+       @discord.ui.button(
+        label="📝 Mazaret Oluştur",
+        style=discord.ButtonStyle.green
+    )
     async def btn(self, interaction, button):
+
+        embed = discord.Embed(
+            title="📋 Mazaret Başvurusu",
+            description="Başvuru yapmak için butona tıkla",
+            color=discord.Color.green()
+        )
+
+        embed.set_image(url="https://media.discordapp.net/attachments/1023953372467966023/1507325447183274154/ChatGPT_Image_22_May_2026_13_12_39.png?ex=6a117db7&is=6a102c37&hm=609b7c3d8ae933f003298d4a8894e9dc0db77fe54602b41d0f0043e6dfa6cfd0&=&format=webp&quality=lossless&width=1163&height=930")
+
         await interaction.response.send_modal(MazaretModal())
 
 
@@ -65,26 +78,31 @@ class OnayView(View):
         if not self.yetkili(interaction):
             return await interaction.response.send_message("Yetki yok", ephemeral=True)
 
-        role = interaction.guild.get_role(YETKILI_ROL)
+        role = interaction.guild.get_role(MAZERET_ROL)
         await self.user.add_roles(role)
 
         aktif.append({
-            "user": self.user.id,
-            "guild": interaction.guild.id,
-            "role": YETKILI_ROL,
-            "bitis": datetime.strptime(self.bitis, "%d.%m.%Y %H:%M")
-        })
+    "user": self.user.id,
+    "guild": interaction.guild.id,
+    "role": MAZERET_ROL,
+    "bitis": datetime.strptime(self.bitis, "%d.%m.%Y %H:%M")
+})
 
-        log = bot.get_channel(LOG_KANAL)
+log = bot.get_channel(LOG_KANAL)
 
-        embed = discord.Embed(title="Onaylandı", color=discord.Color.green())
-        embed.add_field(name="Kullanıcı", value=self.user.mention)
-        embed.add_field(name="Tür", value=self.tur)
-        embed.add_field(name="Onaylayan", value=interaction.user.mention)
+embed = discord.Embed(title="Onaylandı", color=discord.Color.green())
+embed.add_field(name="Kullanıcı", value=self.user.mention)
+embed.add_field(name="Tür", value=self.tur)
+embed.add_field(name="Onaylayan", value=interaction.user.mention)
 
-        await log.send(embed=embed)
+await log.send(embed=embed)
 
-        await interaction.response.send_message("Onaylandı")
+try:
+    await self.user.send("✅ Mazaretin ONAYLANDI.")
+except:
+    pass
+
+await interaction.response.send_message("Onaylandı")
 
     @discord.ui.button(label="Reddet", style=discord.ButtonStyle.danger)
     async def red(self, interaction, button):
