@@ -25,21 +25,32 @@ aktif = []
 # =========================
 class MazaretModal(Modal, title="Mazaret"):
 
-    tur = TextInput(label="Mazeret Türü", placeholder="Sağlık / Aile / Şehir Dışı", required=True)
-    bas = TextInput(label="Başlangıç", placeholder="22.05.2026 15:00", required=True)
-    bit = TextInput(label="Bitiş", placeholder="23.05.2026 15:00", required=True)
-    aciklama = TextInput(label="Açıklama", style=discord.TextStyle.paragraph, required=True)
+    tur = TextInput(
+        label="Mazeret Türü",
+        placeholder="Sağlık / Aile / Şehir Dışı",
+        required=True
+    )
+
+    bas = TextInput(
+        label="Başlangıç Tarih & Saat",
+        placeholder="22.05.2026 15:00",
+        required=True
+    )
+
+    bit = TextInput(
+        label="Bitiş Tarih & Saat",
+        placeholder="23.05.2026 15:00",
+        required=True
+    )
+
+    aciklama = TextInput(
+        label="Açıklama",
+        placeholder="Örn: Hastaneye gitmem gerekiyor",
+        style=discord.TextStyle.paragraph,
+        required=True
+    )
 
     async def on_submit(self, interaction):
-
-        try:
-            bas_dt = datetime.strptime(self.bas.value, "%d.%m.%Y %H:%M")
-            bit_dt = datetime.strptime(self.bit.value, "%d.%m.%Y %H:%M")
-        except:
-            return await interaction.response.send_message(
-                "❌ Tarih formatı yanlış (22.05.2026 15:00)",
-                ephemeral=True
-            )
 
         kanal = bot.get_channel(ONAY_KANAL)
 
@@ -50,7 +61,7 @@ class MazaretModal(Modal, title="Mazaret"):
         embed.add_field(name="Bitiş", value=self.bit.value)
         embed.add_field(name="Açıklama", value=self.aciklama.value, inline=False)
 
-        view = OnayView(interaction.user, self.tur.value, bit_dt)
+        view = OnayView(interaction.user, self.tur.value, self.bit.value)
 
         msg = await kanal.send(embed=embed, view=view)
         view.message = msg
@@ -63,18 +74,20 @@ class MazaretModal(Modal, title="Mazaret"):
 # =========================
 class ButtonOnlyView(View):
 
-    @discord.ui.button(label="📝 Mazaret Oluştur", style=discord.ButtonStyle.green)
+    def __init__(self):
+        super().__init__(timeout=None)
+
+    @discord.ui.button(
+        label="📝 Mazaret Oluştur",
+        style=discord.ButtonStyle.green
+    )
     async def btn(self, interaction, button):
 
-        embed = discord.Embed(
-            title="📋 Mazaret Başvurusu",
-            description="Butona basarak başvuru yapabilirsin",
-            color=discord.Color.green()
-        )
-
-        embed.set_image(url="https://media.discordapp.net/attachments/1023953372467966023/1507325447183274154/ChatGPT_Image_22_May_2026_13_12_39.png?ex=6a117db7&is=6a102c37&hm=609b7c3d8ae933f003298d4a8894e9dc0db77fe54602b41d0f0043e6dfa6cfd0&=&format=webp&quality=lossless&width=1163&height=930")
-
-        await interaction.response.send_modal(MazaretModal())
+        try:
+            modal = MazaretModal()
+            await interaction.response.send_modal(modal)
+        except:
+            await interaction.followup.send("Modal açılamadı, tekrar dene.", ephemeral=True)
 
 
 # =========================
@@ -91,7 +104,7 @@ class OnayView(View):
         self.message = None
 
     def yetkili(self, interaction):
-        return any(role.id == YETKILI_ROL for role in interaction.user.roles)
+        return discord.utils.get(interaction.user.roles, id=YETKILI_ROL)
 
     @discord.ui.button(label="Onayla", style=discord.ButtonStyle.success)
     async def onay(self, interaction, button):
@@ -107,12 +120,16 @@ class OnayView(View):
         role = interaction.guild.get_role(MAZERET_ROL)
         await self.user.add_roles(role)
 
-        # 🔥 KRİTİK FIX: timestamp
+        try:
+            bitis_dt = datetime.strptime(self.bitis, "%d.%m.%Y %H:%M")
+        except:
+            return await interaction.response.send_message("Tarih hatalı", ephemeral=True)
+
         aktif.append({
             "user": self.user.id,
             "guild": interaction.guild.id,
             "role": MAZERET_ROL,
-            "bitis": self.bitis.timestamp()
+            "bitis": bitis_dt
         })
 
         log = bot.get_channel(LOG_KANAL)
@@ -172,37 +189,34 @@ class OnayView(View):
 
 
 # =========================
-# SÜRE SİSTEMİ (FIXLİ + DEBUG)
+# OTOMATİK ROL SİLME
 # =========================
 async def kontrol():
     await bot.wait_until_ready()
-    print("⏰ Süre sistemi aktif")
-
     while not bot.is_closed():
-        now = datetime.now().timestamp()
+
+        now = datetime.now()
 
         for i in aktif[:]:
+            try:
+                if now >= i["bitis"]:
 
-            if now >= i["bitis"]:
+                    guild = bot.get_guild(i["guild"])
+                    if not guild:
+                        continue
 
-                guild = bot.get_guild(i["guild"])
-                if not guild:
-                    continue
-
-                try:
                     user = await guild.fetch_member(i["user"])
                     role = guild.get_role(i["role"])
 
-                    if user and role:
+                    if role and role in user.roles:
                         await user.remove_roles(role)
-                        print(f"✔ Rol silindi: {user}")
 
-                except Exception as e:
-                    print("❌ Hata:", e)
+                    aktif.remove(i)
 
-                aktif.remove(i)
+            except Exception as e:
+                print("ROL SİLME HATA:", e)
 
-        await asyncio.sleep(10)
+        await asyncio.sleep(30)
 
 
 # =========================
@@ -225,11 +239,11 @@ async def kur(ctx):
 
 
 # =========================
-# BOT START
+# BOT BAŞLANGIÇ
 # =========================
 @bot.event
 async def on_ready():
-    print(f"{bot.user} aktif")
+    print("Bot aktif")
     bot.loop.create_task(kontrol())
 
 
