@@ -8,6 +8,7 @@ TOKEN = os.getenv("TOKEN")
 MAZERET_KANAL = 1505330270398578857
 ONAY_KANAL = 1505330270696505465
 LOG_KANAL = 1505330270696505467
+
 YETKILI_ROL = 1505330268204961816
 MAZERET_ROL = 1505330268129722506
 
@@ -25,30 +26,10 @@ aktif = []
 # =========================
 class MazaretModal(Modal, title="Mazaret"):
 
-    tur = TextInput(
-        label="Mazeret Türü",
-        placeholder="Sağlık / Aile / Şehir Dışı",
-        required=True
-    )
-
-    bas = TextInput(
-        label="Başlangıç Tarih & Saat",
-        placeholder="22.05.2026 15:00",
-        required=True
-    )
-
-    bit = TextInput(
-        label="Bitiş Tarih & Saat",
-        placeholder="23.05.2026 15:00",
-        required=True
-    )
-
-    aciklama = TextInput(
-        label="Açıklama",
-        placeholder="Örn: Hastaneye gitmem gerekiyor",
-        style=discord.TextStyle.paragraph,
-        required=True
-    )
+    tur = TextInput(label="Mazeret Türü", placeholder="Sağlık / Aile / Şehir Dışı")
+    bas = TextInput(label="Başlangıç", placeholder="22.05.2026 15:00")
+    bit = TextInput(label="Bitiş", placeholder="23.05.2026 15:00")
+    aciklama = TextInput(label="Açıklama", style=discord.TextStyle.paragraph)
 
     async def on_submit(self, interaction):
 
@@ -74,20 +55,16 @@ class MazaretModal(Modal, title="Mazaret"):
 # =========================
 class ButtonOnlyView(View):
 
-    def __init__(self):
-        super().__init__(timeout=None)
-
-    @discord.ui.button(
-        label="📝 Mazaret Oluştur",
-        style=discord.ButtonStyle.green
-    )
+    @discord.ui.button(label="📝 Mazaret Oluştur", style=discord.ButtonStyle.green)
     async def btn(self, interaction, button):
 
-        try:
-            modal = MazaretModal()
-            await interaction.response.send_modal(modal)
-        except:
-            await interaction.followup.send("Modal açılamadı, tekrar dene.", ephemeral=True)
+        embed = discord.Embed(
+            title="📋 Mazaret Başvurusu",
+            description="Butona bas ve formu doldur",
+            color=discord.Color.green()
+        )
+
+        await interaction.response.send_modal(MazaretModal())
 
 
 # =========================
@@ -104,40 +81,44 @@ class OnayView(View):
         self.message = None
 
     def yetkili(self, interaction):
-        return discord.utils.get(interaction.user.roles, id=YETKILI_ROL)
+        return any(r.id == YETKILI_ROL for r in interaction.user.roles)
 
+    async def disable_buttons(self):
+        for item in self.children:
+            item.disabled = True
+        if self.message:
+            await self.message.edit(view=self)
+
+    # ================= ONAY =================
     @discord.ui.button(label="Onayla", style=discord.ButtonStyle.success)
     async def onay(self, interaction, button):
 
         if self.locked:
-            return await interaction.response.send_message("Zaten sonuçlandı", ephemeral=True)
+            return await interaction.response.send_message("Zaten sonuçlandı.", ephemeral=True)
 
         if not self.yetkili(interaction):
             return await interaction.response.send_message("Yetki yok", ephemeral=True)
 
         self.locked = True
 
-        role = interaction.guild.get_role(MAZERET_ROL)
-        await self.user.add_roles(role)
+        guild = interaction.guild
+        member = await guild.fetch_member(self.user.id)
+        role = guild.get_role(MAZERET_ROL)
+
+        await member.add_roles(role)
 
         try:
-            bitis_dt = datetime.strptime(self.bitis, "%d.%m.%Y %H:%M")
+            dt = datetime.strptime(self.bitis, "%d.%m.%Y %H:%M")
+            aktif.append({"user": self.user.id, "guild": guild.id, "bitis": dt})
         except:
-            return await interaction.response.send_message("Tarih hatalı", ephemeral=True)
-
-        aktif.append({
-            "user": self.user.id,
-            "guild": interaction.guild.id,
-            "role": MAZERET_ROL,
-            "bitis": bitis_dt
-        })
+            pass
 
         log = bot.get_channel(LOG_KANAL)
 
-        embed = discord.Embed(title="Onaylandı", color=discord.Color.green())
+        embed = discord.Embed(title="ONAYLANDI", color=discord.Color.green())
         embed.add_field(name="Kullanıcı", value=self.user.mention)
         embed.add_field(name="Tür", value=self.tur)
-        embed.add_field(name="Onaylayan", value=interaction.user.mention)
+        embed.add_field(name="Yetkili", value=interaction.user.mention)
 
         await log.send(embed=embed)
 
@@ -146,19 +127,15 @@ class OnayView(View):
         except:
             pass
 
-        for item in self.children:
-            item.disabled = True
-
-        if self.message:
-            await self.message.edit(view=self)
-
+        await self.disable_buttons()
         await interaction.response.send_message("Onaylandı", ephemeral=True)
 
+    # ================= RED =================
     @discord.ui.button(label="Reddet", style=discord.ButtonStyle.danger)
     async def red(self, interaction, button):
 
         if self.locked:
-            return await interaction.response.send_message("Zaten sonuçlandı", ephemeral=True)
+            return await interaction.response.send_message("Zaten sonuçlandı.", ephemeral=True)
 
         if not self.yetkili(interaction):
             return await interaction.response.send_message("Yetki yok", ephemeral=True)
@@ -167,10 +144,10 @@ class OnayView(View):
 
         log = bot.get_channel(LOG_KANAL)
 
-        embed = discord.Embed(title="Reddedildi", color=discord.Color.red())
+        embed = discord.Embed(title="REDDEDİLDİ", color=discord.Color.red())
         embed.add_field(name="Kullanıcı", value=self.user.mention)
         embed.add_field(name="Tür", value=self.tur)
-        embed.add_field(name="Reddeden", value=interaction.user.mention)
+        embed.add_field(name="Yetkili", value=interaction.user.mention)
 
         await log.send(embed=embed)
 
@@ -179,44 +156,33 @@ class OnayView(View):
         except:
             pass
 
-        for item in self.children:
-            item.disabled = True
-
-        if self.message:
-            await self.message.edit(view=self)
-
+        await self.disable_buttons()
         await interaction.response.send_message("Reddedildi", ephemeral=True)
 
 
 # =========================
-# OTOMATİK ROL SİLME
+# SÜRE SİSTEMİ (ROL KALDIRMA)
 # =========================
 async def kontrol():
     await bot.wait_until_ready()
-    while not bot.is_closed():
 
+    while not bot.is_closed():
         now = datetime.now()
 
-        for i in aktif[:]:
-            try:
-                if now >= i["bitis"]:
+        for item in aktif[:]:
+            if now >= item["bitis"]:
 
-                    guild = bot.get_guild(i["guild"])
-                    if not guild:
-                        continue
+                guild = bot.get_guild(item["guild"])
+                if guild:
+                    member = await guild.fetch_member(item["user"])
+                    role = guild.get_role(MAZERET_ROL)
 
-                    user = await guild.fetch_member(i["user"])
-                    role = guild.get_role(i["role"])
+                    if member and role:
+                        await member.remove_roles(role)
 
-                    if role and role in user.roles:
-                        await user.remove_roles(role)
+                aktif.remove(item)
 
-                    aktif.remove(i)
-
-            except Exception as e:
-                print("ROL SİLME HATA:", e)
-
-        await asyncio.sleep(30)
+        await asyncio.sleep(60)
 
 
 # =========================
@@ -239,7 +205,7 @@ async def kur(ctx):
 
 
 # =========================
-# BOT BAŞLANGIÇ
+# READY
 # =========================
 @bot.event
 async def on_ready():
